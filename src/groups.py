@@ -16,19 +16,18 @@ def get_user_groups(user_id: int) -> list:
     raw_response = requests.get(api)
     raw_response.raise_for_status()
 
-    json_response = raw_response.json()
+    response = raw_response.json()
     
     groups = []
 
-    for item in json_response["data"]:
-        groups.append(item["group"])
+    for group in response["data"]:
+        groups.append(group["group"])
 
     return groups
 
-def get_group_members(group_id: int, limit: int) -> list:
-    """Returns a list of users in a group. Runs slowly."""
+def get_members_of_group(group_id: int, limit: int) -> set:
+    """Returns a set of unique user IDs from a group."""
 
-    cursor = "PLACEHOLDER"
     api = f"https://groups.roblox.com/v1/groups/{group_id}/users" \
         f"?limit=10&sortOrder=Desc"
 
@@ -38,35 +37,37 @@ def get_group_members(group_id: int, limit: int) -> list:
     if not type(limit) is int:
         raise ValueError("Function argument 'limit' must be an integer.")
 
-    users = []
+    cursor = "  "
+    users = set()
 
     while cursor:
-        if cursor == "PLACEHOLDER":  
-            cursor = ""
-        
-        raw_response = requests.get(f"{api}&cursor={cursor}")
+        if len(users) + 10 > limit: break
+
+        raw_response = requests.get(api + "&cursor=" + cursor)
         raw_response.raise_for_status()
 
-        json_response = raw_response.json()
+        response = raw_response.json()
 
-        for item in json_response["data"]:
-            users.append(item)
+        for user in response["data"]:
+            users.add(user["user"]["userId"])
         
-        cursor = json_response["nextPageCursor"]
-
-        if len(users) + 10 > limit: 
-            break
+        cursor = response["nextPageCursor"]
 
     return users
 
-def get_members_of_groups(group_ids: list[int], limit: int) -> set:
-    """Returns unique user IDs (less than limit amount) from many groups."""
+def log_common_groups(user_id: int, output: dict) -> None:
+    """
+    Gets groups that a user is in and logs them into an output dict as
+    a tuple, containing the group ID and the number of common users
+    in that group (added through subsequent runs of this function).
+    """
 
-    group_user_ids = set()
+    user_groups = get_user_groups(user_id)
 
-    for group_id in group_ids:
-        for member in get_group_members(group_id, limit):
-            user_id = member["user"]["userId"]
-            group_user_ids.add(user_id)
-    
-    return group_user_ids
+    for group in user_groups:
+        group_id = group["id"]
+
+        if not group_id in output:
+            output[group_id] = 1
+        else:
+            output[group_id] = output[group_id] + 1
